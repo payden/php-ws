@@ -204,8 +204,8 @@ PHP_METHOD(ws, bind_ssl) {
   int key_file_len;
   int chain_file_len;
 
-  if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ssss|s", &host, &host_len, &port, &port_len, &key_file, &key_file_len, &chain_file, &chain_file_len)
-    == FAILURE) {
+  if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ssss|s", &host, &host_len, &port, &port_len,
+     &key_file, &key_file_len, &cert_file, &cert_file_len, &chain_file, &chain_file_len) == FAILURE) {
     return;
   }
 
