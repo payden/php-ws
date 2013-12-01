@@ -45,6 +45,7 @@ static zend_function_entry ws_client_methods[] = {
 static zend_function_entry ws_methods[] = {
 	PHP_ME(ws, __construct, NULL, ZEND_ACC_PUBLIC | ZEND_ACC_CTOR)
         PHP_ME(ws, bind, NULL, ZEND_ACC_PUBLIC)
+        PHP_ME(ws, bind_ssl, NULL, ZEND_ACC_PUBLIC)
         PHP_ME(ws, run, NULL, ZEND_ACC_PUBLIC)
 	{NULL, NULL, NULL}
 };
@@ -187,6 +188,32 @@ PHP_METHOD(ws, run) {
   libwebsock_wait(ws_obj->ws_ctx);
   RETURN_TRUE;
 }
+
+PHP_METHOD(ws, bind_ssl) {
+  zval *this;
+
+  this = getThis();
+  char *host;
+  char *port;
+  char *cert_file;
+  char *key_file;
+  char *chain_file = NULL;
+  int host_len;
+  int port_len;
+  int cert_file_len;
+  int key_file_len;
+  int chain_file_len;
+
+  if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ssss|s", &host, &host_len, &port, &port_len, &key_file, &key_file_len, &chain_file, &chain_file_len)
+    == FAILURE) {
+    return;
+  }
+
+  ws_object *ws_obj = (ws_object *) zend_object_store_get_object(this TSRMLS_CC);
+  libwebsock_bind_ssl_real(ws_obj->ws_ctx, host, port, key_file, cert_file, chain_file);
+  RETURN_TRUE;
+}
+
 
 PHP_METHOD(ws, bind) {
   zval *this;

@@ -27,6 +27,7 @@
 //PHP Function prototypes
 PHP_METHOD(ws, __construct);
 PHP_METHOD(ws, bind);
+PHP_METHOD(ws, bind_ssl);
 PHP_METHOD(ws, run);
 
 PHP_METHOD(ws_client, __construct);
