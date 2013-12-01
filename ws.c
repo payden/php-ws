@@ -25,6 +25,9 @@
 #include "php.h"
 #include "php_ws.h"
 
+static int ws_onopen(libwebsock_client_state *state);
+static int ws_onclose(libwebsock_client_state *state);
+static int ws_onmessage(libwebsock_client_state *state, libwebsock_message *msg);
 extern zend_class_entry *ws_ce;
 extern zend_class_entry *ws_client_ce;
 
@@ -98,7 +101,6 @@ static zend_object_value ws_object_create(zend_class_entry *class_type TSRMLS_DC
 PHP_METHOD(ws_client, __construct) {
   zval *this;
   this = getThis();
-  ws_client_object *ws_client_obj = (ws_client_object *) zend_object_store_get_object(this TSRMLS_CC);
 
   RETURN_TRUE;
 }
@@ -106,6 +108,21 @@ PHP_METHOD(ws_client, __construct) {
 PHP_METHOD(ws_client, sendText) {
   zval *this;
   this = getThis();
+  char *to_send;
+  int to_send_len;
+
+  if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &to_send, &to_send_len) == FAILURE) {
+    RETURN_FALSE;
+  }
+
+  ws_client_object *ws_client_obj = (ws_client_object *) zend_object_store_get_object(this TSRMLS_CC);
+  libwebsock_client_state *state = ws_client_obj->ws_state;
+  if (state == NULL) {
+    RETURN_FALSE;
+  }
+  
+  libwebsock_send_text_with_length(state, to_send, (unsigned int) to_send_len);
+
   RETURN_TRUE;
 }
 
@@ -116,6 +133,10 @@ PHP_METHOD(ws, __construct) {
 	this = getThis();
 	ws_object *ws_obj = (ws_object *)zend_object_store_get_object(this TSRMLS_CC);
         ws_obj->ws_ctx = libwebsock_init();
+        ws_obj->ws_ctx->onopen = ws_onopen;
+        ws_obj->ws_ctx->onclose = ws_onclose;
+        ws_obj->ws_ctx->onmessage = ws_onmessage;
+        ws_obj->ws_ctx->user_data = (void *) this; //save this instance in context user data
 
 	RETURN_TRUE;
 }
@@ -148,6 +169,68 @@ PHP_METHOD(ws, bind) {
   RETURN_TRUE;
 }
 
+static int ws_onopen(libwebsock_client_state *state) {
+  libwebsock_context *ctx = (libwebsock_context *) state->ctx;
+  zval function_name;
+  zval *return_user_call;
+  ZVAL_STRING(&function_name, "__invoke", 0);
+  zval *this = ctx->user_data;
+  zval *closure = zend_read_property(ws_ce, this, "onopen", sizeof("onopen")-1, 0 TSRMLS_CC);
+  if (closure) { //if onopen callback set in PHP
+    zval *client_obj;
+    zval **params[1];
+    ws_client_object *intern;
+    //create WebSocketClient object
+    MAKE_STD_ZVAL(client_obj);
+    object_init_ex(client_obj, ws_client_ce);
+    zend_update_property_long(ws_client_ce, client_obj, "sockfd", sizeof("sockfd")-1, (long) state->sockfd TSRMLS_CC);
+    //set call_user_function_ex params
+    params[0] = &client_obj;
+    //grab internal object and associate this libwebsock state with this php obj
+    intern = (ws_client_object *) zend_object_store_get_object(client_obj TSRMLS_CC);
+    intern->ws_state = state;
+    if (call_user_function_ex(NULL, &closure, &function_name, &return_user_call, 1, params, 0, NULL TSRMLS_CC) == FAILURE) {
+      //throw exception eventually
+    }
+    //ensure we decrement refcount or some other assurance that this will not leak client_obj?
+    //I believe zval_ptr_dtor will only dec refcount and if callback holds on to reference it will not free
+    zval_ptr_dtor(&client_obj);
+  }
+  return 0;
+}
+
+static int ws_onclose(libwebsock_client_state *state) {
+  libwebsock_context *ctx = (libwebsock_context *) state->ctx;
+  zval function_name;
+  zval *return_user_call;
+  ZVAL_STRING(&function_name, "__invoke", 0);
+  zval *this = ctx->user_data;
+  zval *closure = zend_read_property(ws_ce, this, "onclose", sizeof("onclose")-1, 0 TSRMLS_CC);
+  if (closure) {
+    zval *client_obj;
+    zval **params[1];
+    ws_client_object *intern;
+    //create WebSocketClient object
+    MAKE_STD_ZVAL(client_obj);
+    object_init_ex(client_obj, ws_client_ce);
+    zend_update_property_long(ws_client_ce, client_obj, "sockfd", sizeof("sockfd")-1, (long) state->sockfd TSRMLS_CC);
+    params[0] = &client_obj;
+    intern = (ws_client_object *) zend_object_store_get_object(client_obj TSRMLS_CC);
+    intern->ws_state = state;
+    if (call_user_function_ex(NULL, &closure, &function_name, &return_user_call, 1, params, 0, NULL TSRMLS_CC) == FAILURE) {
+      //something bad happened
+    }
+    zval_ptr_dtor(&client_obj);
+  }
+
+  return 0;
+}
+
+static int ws_onmessage(libwebsock_client_state *state, libwebsock_message *msg) {
+  fprintf(stderr, "in callback in extension: onmessage\n");
+  return 0;
+}
+
 void register_ws_client_class(TSRMLS_D) {
   zend_class_entry ce;
   INIT_CLASS_ENTRY(ce, "WebSocketClient", ws_client_methods);
@@ -164,6 +247,9 @@ void register_ws_class(TSRMLS_D) {
 	memcpy(&ws_object_handlers, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
 	ws_object_handlers.clone_obj = NULL;
 	ws_ce = zend_register_internal_class(&ce TSRMLS_CC);
+        zend_declare_property_null(ws_ce, "onopen", sizeof("onopen")-1, ZEND_ACC_PUBLIC TSRMLS_CC);
+        zend_declare_property_null(ws_ce, "onclose", sizeof("onclose")-1, ZEND_ACC_PUBLIC TSRMLS_CC);
+        zend_declare_property_null(ws_ce, "onmessage", sizeof("onmessage")-1, ZEND_ACC_PUBLIC TSRMLS_CC);
 }
 
 
