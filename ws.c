@@ -26,8 +26,13 @@
 #include "php_ws.h"
 
 extern zend_class_entry *ws_ce;
+extern zend_class_entry *ws_client_ce;
 
-
+static zend_function_entry ws_client_methods[] = {
+  PHP_ME(ws_client, __construct, NULL, ZEND_ACC_PUBLIC | ZEND_ACC_CTOR)
+  PHP_ME(ws_client, sendText, NULL, ZEND_ACC_PUBLIC)
+  {NULL, NULL, NULL}
+};
 
 static zend_function_entry ws_methods[] = {
 	PHP_ME(ws, __construct, NULL, ZEND_ACC_PUBLIC | ZEND_ACC_CTOR)
@@ -36,12 +41,39 @@ static zend_function_entry ws_methods[] = {
 	{NULL, NULL, NULL}
 };
 
+static void ws_client_free_storage(void *object TSRMLS_DC) {
+  ws_client_object *intern = (ws_client_object *) object;
+  zend_hash_destroy(intern->zo.properties);
+  FREE_HASHTABLE(intern->zo.properties);
+  efree(intern);
+}
+
 static void ws_free_storage(void *object TSRMLS_DC) {
         ws_object *intern = (ws_object *)object;
         zend_hash_destroy(intern->zo.properties);
         FREE_HASHTABLE(intern->zo.properties);
         efree(intern);
 }
+
+static zend_object_value ws_client_object_create(zend_class_entry *class_type TSRMLS_DC) {
+  zend_object_value retval;
+  ws_client_object *intern;
+  intern = (ws_client_object *) emalloc(sizeof(ws_client_object));
+  memset(intern, 0, sizeof(ws_client_object));
+  intern->zo.ce = class_type;
+  ALLOC_HASHTABLE(intern->zo.properties);
+  zend_hash_init(intern->zo.properties, 0, NULL, ZVAL_PTR_DTOR, 0);
+#if ZEND_MODULE_API_NO >= 20100525
+  object_properties_init(&(intern->zo), class_type);
+#else
+  zval *tmp;
+  zend_hash_copy(intern->zo.properties, &class_type->default_properties, (copy_ctor_func_t) zval_add_ref, (void *) &tmp, sizeof(zval *));
+#endif
+  retval.handle = zend_objects_store_put(intern, NULL, ws_client_free_storage, NULL TSRMLS_CC);
+  retval.handlers = (zend_object_handlers *) &ws_client_object_handlers;
+  return retval;
+}
+
 
 static zend_object_value ws_object_create(zend_class_entry *class_type TSRMLS_DC) {
         zend_object_value retval;
@@ -63,6 +95,19 @@ static zend_object_value ws_object_create(zend_class_entry *class_type TSRMLS_DC
         return retval;
 }
 
+PHP_METHOD(ws_client, __construct) {
+  zval *this;
+  this = getThis();
+  ws_client_object *ws_client_obj = (ws_client_object *) zend_object_store_get_object(this TSRMLS_CC);
+
+  RETURN_TRUE;
+}
+
+PHP_METHOD(ws_client, sendText) {
+  zval *this;
+  this = getThis();
+  RETURN_TRUE;
+}
 
 PHP_METHOD(ws, __construct) {
 	zval *this;
@@ -82,7 +127,6 @@ PHP_METHOD(ws, run) {
 
   ws_object *ws_obj = (ws_object *) zend_object_store_get_object(this TSRMLS_CC);
   libwebsock_wait(ws_obj->ws_ctx);
-  //never reached
   RETURN_TRUE;
 }
 
@@ -102,6 +146,15 @@ PHP_METHOD(ws, bind) {
   ws_object *ws_obj = (ws_object *) zend_object_store_get_object(this TSRMLS_CC);
   libwebsock_bind(ws_obj->ws_ctx, host, port);
   RETURN_TRUE;
+}
+
+void register_ws_client_class(TSRMLS_D) {
+  zend_class_entry ce;
+  INIT_CLASS_ENTRY(ce, "WebSocketClient", ws_client_methods);
+  ce.create_object = ws_client_object_create;
+  memcpy(&ws_client_object_handlers, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
+  ws_client_object_handlers.clone_obj = NULL;
+  ws_client_ce = zend_register_internal_class(&ce TSRMLS_CC);
 }
 
 void register_ws_class(TSRMLS_D) {

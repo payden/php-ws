@@ -29,11 +29,19 @@ PHP_METHOD(ws, __construct);
 PHP_METHOD(ws, bind);
 PHP_METHOD(ws, run);
 
+PHP_METHOD(ws_client, __construct);
+PHP_METHOD(ws_client, sendText);
+
 PHP_MINIT_FUNCTION(ws);
 PHP_MSHUTDOWN_FUNCTION(ws);
 PHP_MINFO_FUNCTION(ws);
 
 //Typedefs
+
+typedef struct {
+  zend_object zo;
+  libwebsock_client_state *ws_state;
+} ws_client_object;
 
 typedef struct {
 	zend_object zo;
@@ -42,10 +50,13 @@ typedef struct {
 
 //global symbols
 static zend_class_entry *ws_ce;
+static zend_class_entry *ws_client_ce;
 zend_object_handlers ws_object_handlers;
+zend_object_handlers ws_client_object_handlers;
 
 //function prototypes
 void register_ws_class(TSRMLS_D);
+void register_ws_client_class(TSRMLS_D);
 
 extern zend_module_entry ws_module_entry;
 

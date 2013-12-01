@@ -53,6 +53,7 @@ ZEND_GET_MODULE(ws)
 PHP_MINIT_FUNCTION(ws)
 {
 	register_ws_class(TSRMLS_C);
+        register_ws_client_class(TSRMLS_C);
 	return SUCCESS;
 }
 
