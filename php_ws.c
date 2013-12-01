@@ -54,6 +54,7 @@ PHP_MINIT_FUNCTION(ws)
 {
 	register_ws_class(TSRMLS_C);
         register_ws_client_class(TSRMLS_C);
+        register_ws_message_class(TSRMLS_C);
 	return SUCCESS;
 }
 

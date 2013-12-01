@@ -40,6 +40,10 @@ PHP_MINFO_FUNCTION(ws);
 
 typedef struct {
   zend_object zo;
+} ws_message_object;
+
+typedef struct {
+  zend_object zo;
   libwebsock_client_state *ws_state;
 } ws_client_object;
 
@@ -51,12 +55,15 @@ typedef struct {
 //global symbols
 static zend_class_entry *ws_ce;
 static zend_class_entry *ws_client_ce;
+static zend_class_entry *ws_message_ce;
 zend_object_handlers ws_object_handlers;
 zend_object_handlers ws_client_object_handlers;
+zend_object_handlers ws_message_object_handlers;
 
 //function prototypes
 void register_ws_class(TSRMLS_D);
 void register_ws_client_class(TSRMLS_D);
+void register_ws_message_class(TSRMLS_D);
 
 extern zend_module_entry ws_module_entry;
 

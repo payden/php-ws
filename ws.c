@@ -30,6 +30,11 @@ static int ws_onclose(libwebsock_client_state *state);
 static int ws_onmessage(libwebsock_client_state *state, libwebsock_message *msg);
 extern zend_class_entry *ws_ce;
 extern zend_class_entry *ws_client_ce;
+extern zend_class_entry *ws_message_ce;
+
+static zend_function_entry ws_message_methods[] = {
+  {NULL, NULL, NULL}
+};
 
 static zend_function_entry ws_client_methods[] = {
   PHP_ME(ws_client, __construct, NULL, ZEND_ACC_PUBLIC | ZEND_ACC_CTOR)
@@ -44,18 +49,50 @@ static zend_function_entry ws_methods[] = {
 	{NULL, NULL, NULL}
 };
 
+static void ws_message_free_storage(void *object TSRMLS_DC) {
+  ws_message_object *intern = (ws_message_object *) object;
+  if (intern->zo.properties) {
+    zend_hash_destroy(intern->zo.properties);
+    FREE_HASHTABLE(intern->zo.properties);
+  }
+  efree(intern);
+}
+
 static void ws_client_free_storage(void *object TSRMLS_DC) {
   ws_client_object *intern = (ws_client_object *) object;
-  zend_hash_destroy(intern->zo.properties);
-  FREE_HASHTABLE(intern->zo.properties);
+  if (intern->zo.properties) {
+    zend_hash_destroy(intern->zo.properties);
+    FREE_HASHTABLE(intern->zo.properties);
+  }
   efree(intern);
 }
 
 static void ws_free_storage(void *object TSRMLS_DC) {
         ws_object *intern = (ws_object *)object;
-        zend_hash_destroy(intern->zo.properties);
-        FREE_HASHTABLE(intern->zo.properties);
+        if (intern->zo.properties) {
+          zend_hash_destroy(intern->zo.properties);
+          FREE_HASHTABLE(intern->zo.properties);
+        }
         efree(intern);
+}
+
+static zend_object_value ws_message_object_create(zend_class_entry *class_type TSRMLS_DC) {
+  zend_object_value retval;
+  ws_message_object *intern;
+  intern = (ws_message_object *) emalloc(sizeof(ws_message_object));
+  memset(intern, 0, sizeof(ws_message_object));
+  intern->zo.ce = class_type;
+  ALLOC_HASHTABLE(intern->zo.properties);
+  zend_hash_init(intern->zo.properties, 0, NULL, ZVAL_PTR_DTOR, 0);
+#if ZEND_MODULE_API_NO >= 20100525
+  object_properties_init(&(intern->zo), class_type);
+#else
+  zval *tmp;
+  zend_hash_copy(intern->zo.properties, &class_type->default_properties, (copy_ctor_func_t) zval_add_ref, (void *) &tmp, sizeof(zval *));
+#endif
+  retval.handle = zend_objects_store_put(intern, NULL, ws_message_free_storage, NULL TSRMLS_CC);
+  retval.handlers = (zend_object_handlers *) &ws_message_object_handlers;
+  return retval;
 }
 
 static zend_object_value ws_client_object_create(zend_class_entry *class_type TSRMLS_DC) {
@@ -87,7 +124,7 @@ static zend_object_value ws_object_create(zend_class_entry *class_type TSRMLS_DC
         ALLOC_HASHTABLE(intern->zo.properties);
         zend_hash_init(intern->zo.properties, 0, NULL, ZVAL_PTR_DTOR, 0);
 #if ZEND_MODULE_API_NO >= 20100525
-        object_properties_init(&(intern->zo), class_type);
+        object_properties_init(&intern->zo, class_type);
 #else
         zval *tmp;
         zend_hash_copy(intern->zo.properties, &class_type->default_properties, (copy_ctor_func_t) zval_add_ref, (void *) &tmp, sizeof(zval *));
@@ -192,8 +229,6 @@ static int ws_onopen(libwebsock_client_state *state) {
     if (call_user_function_ex(NULL, &closure, &function_name, &return_user_call, 1, params, 0, NULL TSRMLS_CC) == FAILURE) {
       //throw exception eventually
     }
-    //ensure we decrement refcount or some other assurance that this will not leak client_obj?
-    //I believe zval_ptr_dtor will only dec refcount and if callback holds on to reference it will not free
     zval_ptr_dtor(&client_obj);
   }
   return 0;
@@ -227,8 +262,49 @@ static int ws_onclose(libwebsock_client_state *state) {
 }
 
 static int ws_onmessage(libwebsock_client_state *state, libwebsock_message *msg) {
-  fprintf(stderr, "in callback in extension: onmessage\n");
+  libwebsock_context *ctx = (libwebsock_context *) state->ctx;
+  zval *this = ctx->user_data;
+  zval *closure = zend_read_property(ws_ce, this, "onmessage", sizeof("onmessage")-1, 0 TSRMLS_CC);
+  if (closure) {
+    zval function_name;
+    zval *return_user_call;
+    zval *client_obj;
+    zval *message_obj;
+    zval **params[2];
+    ws_client_object *intern_client;
+    ZVAL_STRING(&function_name, "__invoke", 0);
+    //create WebSocketClient object
+    MAKE_STD_ZVAL(client_obj);
+    object_init_ex(client_obj, ws_client_ce);
+    zend_update_property_long(ws_client_ce, client_obj, "sockfd", sizeof("sockfd")-1, (long) state->sockfd TSRMLS_CC);
+    params[0] = &client_obj;
+    intern_client = (ws_client_object *) zend_object_store_get_object(client_obj TSRMLS_CC);
+    intern_client->ws_state = state;
+
+    //create WebSocketMessage object
+    MAKE_STD_ZVAL(message_obj);
+    object_init_ex(message_obj, ws_message_ce);
+    zend_update_property_long(ws_message_ce, message_obj, "opcode", sizeof("opcode")-1, (long) msg->opcode TSRMLS_CC);
+    zend_update_property_string(ws_message_ce, message_obj, "payload", sizeof("payload")-1, msg->payload TSRMLS_CC);
+    params[1] = &message_obj;
+    if (call_user_function_ex(NULL, &closure, &function_name, &return_user_call, 2, params, 0, NULL TSRMLS_CC) == FAILURE) {
+      //something bad happened
+    }
+    zval_ptr_dtor(&client_obj);
+    zval_ptr_dtor(&message_obj);
+  }
   return 0;
+}
+
+void register_ws_message_class(TSRMLS_D) {
+  zend_class_entry ce;
+  INIT_CLASS_ENTRY(ce, "WebSocketMessage", ws_message_methods);
+  ce.create_object = ws_message_object_create;
+  memcpy(&ws_message_object_handlers, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
+  ws_message_object_handlers.clone_obj = NULL;
+  ws_message_ce = zend_register_internal_class(&ce TSRMLS_CC);
+  zend_declare_property_null(ws_message_ce, "payload", sizeof("payload")-1, ZEND_ACC_PUBLIC TSRMLS_CC);
+  zend_declare_property_null(ws_message_ce, "opcode", sizeof("opcode")-1, ZEND_ACC_PUBLIC TSRMLS_CC);
 }
 
 void register_ws_client_class(TSRMLS_D) {
@@ -238,11 +314,12 @@ void register_ws_client_class(TSRMLS_D) {
   memcpy(&ws_client_object_handlers, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
   ws_client_object_handlers.clone_obj = NULL;
   ws_client_ce = zend_register_internal_class(&ce TSRMLS_CC);
+  zend_declare_property_null(ws_client_ce, "sockfd", sizeof("sockfd")-1, ZEND_ACC_PUBLIC TSRMLS_CC);
 }
 
 void register_ws_class(TSRMLS_D) {
 	zend_class_entry ce;
-	INIT_CLASS_ENTRY(ce, "WebSocket", ws_methods);
+	INIT_CLASS_ENTRY(ce, "WebSocketServer", ws_methods);
 	ce.create_object = ws_object_create;
 	memcpy(&ws_object_handlers, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
 	ws_object_handlers.clone_obj = NULL;
