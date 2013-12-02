@@ -39,6 +39,7 @@ static zend_function_entry ws_message_methods[] = {
 static zend_function_entry ws_client_methods[] = {
   PHP_ME(ws_client, __construct, NULL, ZEND_ACC_PUBLIC | ZEND_ACC_CTOR)
   PHP_ME(ws_client, sendText, NULL, ZEND_ACC_PUBLIC)
+  PHP_ME(ws_client, sendBinary, NULL, ZEND_ACC_PUBLIC)
   {NULL, NULL, NULL}
 };
 
@@ -140,6 +141,27 @@ PHP_METHOD(ws_client, __construct) {
   zval *this;
   this = getThis();
 
+  RETURN_TRUE;
+}
+
+PHP_METHOD(ws_client, sendBinary) {
+  zval *this;
+  this = getThis();
+  char *to_send;
+  int to_send_len;
+  long payload_len;
+
+  if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sl", &to_send, &to_send_len, &payload_len) == FAILURE) {
+    RETURN_FALSE;
+  }
+
+  ws_client_object *ws_client_obj = (ws_client_object *) zend_object_store_get_object(this TSRMLS_CC);
+  libwebsock_client_state *state = ws_client_obj->ws_state;
+  if (state == NULL) {
+    RETURN_FALSE;
+  }
+
+  libwebsock_send_binary(state, to_send, (unsigned int) payload_len);
   RETURN_TRUE;
 }
 
@@ -313,6 +335,7 @@ static int ws_onmessage(libwebsock_client_state *state, libwebsock_message *msg)
     object_init_ex(message_obj, ws_message_ce);
     zend_update_property_long(ws_message_ce, message_obj, "opcode", sizeof("opcode")-1, (long) msg->opcode TSRMLS_CC);
     zend_update_property_string(ws_message_ce, message_obj, "payload", sizeof("payload")-1, msg->payload TSRMLS_CC);
+    zend_update_property_long(ws_message_ce, message_obj, "payload_len", sizeof("payload_len")-1, (long) msg->payload_len TSRMLS_CC);
     params[1] = &message_obj;
     if (call_user_function_ex(NULL, &closure, &function_name, &return_user_call, 2, params, 0, NULL TSRMLS_CC) == FAILURE) {
       //something bad happened
@@ -331,7 +354,11 @@ void register_ws_message_class(TSRMLS_D) {
   ws_message_object_handlers.clone_obj = NULL;
   ws_message_ce = zend_register_internal_class(&ce TSRMLS_CC);
   zend_declare_property_null(ws_message_ce, "payload", sizeof("payload")-1, ZEND_ACC_PUBLIC TSRMLS_CC);
+  zend_declare_property_null(ws_message_ce, "payload_len", sizeof("payload_len")-1, ZEND_ACC_PUBLIC TSRMLS_CC);
   zend_declare_property_null(ws_message_ce, "opcode", sizeof("opcode")-1, ZEND_ACC_PUBLIC TSRMLS_CC);
+  zend_declare_class_constant_long(ws_message_ce, "OPCODE_TEXT", sizeof("OPCODE_TEXT")-1, 1 TSRMLS_CC);
+  zend_declare_class_constant_long(ws_message_ce, "OPCODE_BINARY", sizeof("OPCODE_BINARY")-1, 2 TSRMLS_CC);
+
 }
 
 void register_ws_client_class(TSRMLS_D) {
