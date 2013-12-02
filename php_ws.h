@@ -33,6 +33,7 @@ PHP_METHOD(ws, run);
 PHP_METHOD(ws_client, __construct);
 PHP_METHOD(ws_client, sendText);
 PHP_METHOD(ws_client, sendBinary);
+PHP_METHOD(ws_client, close);
 
 PHP_MINIT_FUNCTION(ws);
 PHP_MSHUTDOWN_FUNCTION(ws);

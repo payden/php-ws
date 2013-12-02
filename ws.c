@@ -40,6 +40,7 @@ static zend_function_entry ws_client_methods[] = {
   PHP_ME(ws_client, __construct, NULL, ZEND_ACC_PUBLIC | ZEND_ACC_CTOR)
   PHP_ME(ws_client, sendText, NULL, ZEND_ACC_PUBLIC)
   PHP_ME(ws_client, sendBinary, NULL, ZEND_ACC_PUBLIC)
+  PHP_ME(ws_client, close, NULL, ZEND_ACC_PUBLIC)
   {NULL, NULL, NULL}
 };
 
@@ -141,6 +142,20 @@ PHP_METHOD(ws_client, __construct) {
   zval *this;
   this = getThis();
 
+  RETURN_TRUE;
+}
+
+PHP_METHOD(ws_client, close) {
+  zval *this;
+  this = getThis();
+
+  if (zend_parse_parameters_none() == FAILURE) {
+    RETURN_FALSE;
+  }
+
+  ws_client_object *ws_client_obj = (ws_client_object *) zend_object_store_get_object(this TSRMLS_CC);
+  libwebsock_client_state *state = ws_client_obj->ws_state;
+  libwebsock_close(state);
   RETURN_TRUE;
 }
 
