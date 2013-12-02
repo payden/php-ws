@@ -5,6 +5,9 @@ PHP extension for writing WebSocket servers in PHP.
 
 [![Build Status](https://travis-ci.org/payden/php-ws.png?branch=master)](https://travis-ci.org/payden/php-ws)
 
+* [API Reference](https://github.com/payden/php-ws/wiki/API-Reference)
+* [Installation](https://github.com/payden/php-ws/wiki/Installation)
+
 Feel like writing your WebSocket servers in PHP?  Why not.
 
 ```php
