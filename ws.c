@@ -22,6 +22,8 @@
 #endif
 
 #include <websock/websock.h>
+#include <netdb.h>
+#include <sys/socket.h>
 #include "php.h"
 #include "php_ws.h"
 
@@ -276,6 +278,7 @@ static int ws_onopen(libwebsock_client_state *state) {
   zval *return_user_call;
   ZVAL_STRING(&function_name, "__invoke", 0);
   zval *this = ctx->user_data;
+  char host[NI_MAXHOST];
   zval *closure = zend_read_property(ws_ce, this, "onopen", sizeof("onopen")-1, 0 TSRMLS_CC);
   if (closure) { //if onopen callback set in PHP
     zval *client_obj;
@@ -285,6 +288,8 @@ static int ws_onopen(libwebsock_client_state *state) {
     MAKE_STD_ZVAL(client_obj);
     object_init_ex(client_obj, ws_client_ce);
     zend_update_property_long(ws_client_ce, client_obj, "sockfd", sizeof("sockfd")-1, (long) state->sockfd TSRMLS_CC);
+    getnameinfo((struct sockaddr *)state->sa, sizeof(struct sockaddr), host, sizeof(host), NULL, 0, NI_NUMERICHOST);
+    zend_update_property_string(ws_client_ce, client_obj, "address", sizeof("address")-1, host TSRMLS_CC);
     //set call_user_function_ex params
     params[0] = &client_obj;
     //grab internal object and associate this libwebsock state with this php obj
@@ -304,6 +309,7 @@ static int ws_onclose(libwebsock_client_state *state) {
   zval *return_user_call;
   ZVAL_STRING(&function_name, "__invoke", 0);
   zval *this = ctx->user_data;
+  char host[NI_MAXHOST];
   zval *closure = zend_read_property(ws_ce, this, "onclose", sizeof("onclose")-1, 0 TSRMLS_CC);
   if (closure) {
     zval *client_obj;
@@ -313,6 +319,8 @@ static int ws_onclose(libwebsock_client_state *state) {
     MAKE_STD_ZVAL(client_obj);
     object_init_ex(client_obj, ws_client_ce);
     zend_update_property_long(ws_client_ce, client_obj, "sockfd", sizeof("sockfd")-1, (long) state->sockfd TSRMLS_CC);
+    getnameinfo((struct sockaddr *)state->sa, sizeof(struct sockaddr), host, sizeof(host), NULL, 0, NI_NUMERICHOST);
+    zend_update_property_string(ws_client_ce, client_obj, "address", sizeof("address")-1, host TSRMLS_CC);
     params[0] = &client_obj;
     intern = (ws_client_object *) zend_object_store_get_object(client_obj TSRMLS_CC);
     intern->ws_state = state;
@@ -335,12 +343,15 @@ static int ws_onmessage(libwebsock_client_state *state, libwebsock_message *msg)
     zval *client_obj;
     zval *message_obj;
     zval **params[2];
+    char host[NI_MAXHOST];
     ws_client_object *intern_client;
     ZVAL_STRING(&function_name, "__invoke", 0);
     //create WebSocketClient object
     MAKE_STD_ZVAL(client_obj);
     object_init_ex(client_obj, ws_client_ce);
     zend_update_property_long(ws_client_ce, client_obj, "sockfd", sizeof("sockfd")-1, (long) state->sockfd TSRMLS_CC);
+    getnameinfo((struct sockaddr *)state->sa, sizeof(struct sockaddr), host, sizeof(host), NULL, 0, NI_NUMERICHOST);
+    zend_update_property_string(ws_client_ce, client_obj, "address", sizeof("address")-1, host TSRMLS_CC);
     params[0] = &client_obj;
     intern_client = (ws_client_object *) zend_object_store_get_object(client_obj TSRMLS_CC);
     intern_client->ws_state = state;
@@ -384,6 +395,7 @@ void register_ws_client_class(TSRMLS_D) {
   ws_client_object_handlers.clone_obj = NULL;
   ws_client_ce = zend_register_internal_class(&ce TSRMLS_CC);
   zend_declare_property_null(ws_client_ce, "sockfd", sizeof("sockfd")-1, ZEND_ACC_PUBLIC TSRMLS_CC);
+  zend_declare_property_null(ws_client_ce, "address", sizeof("address")-1, ZEND_ACC_PUBLIC TSRMLS_CC);
 }
 
 void register_ws_class(TSRMLS_D) {
