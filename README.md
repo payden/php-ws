@@ -3,6 +3,8 @@ php-ws
 
 PHP extension for writing WebSocket servers in PHP.
 
+[Autobahn WebSocket Test Suite Report](http://paydensutherland.com/autobahn)
+
 [![Build Status](https://travis-ci.org/payden/php-ws.png?branch=master)](https://travis-ci.org/payden/php-ws)
 
 * [API Reference](https://github.com/payden/php-ws/wiki/API-Reference)
