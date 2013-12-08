@@ -360,7 +360,7 @@ static int ws_onmessage(libwebsock_client_state *state, libwebsock_message *msg)
     MAKE_STD_ZVAL(message_obj);
     object_init_ex(message_obj, ws_message_ce);
     zend_update_property_long(ws_message_ce, message_obj, "opcode", sizeof("opcode")-1, (long) msg->opcode TSRMLS_CC);
-    zend_update_property_string(ws_message_ce, message_obj, "payload", sizeof("payload")-1, msg->payload TSRMLS_CC);
+    zend_update_property_stringl(ws_message_ce, message_obj, "payload", sizeof("payload")-1, msg->payload, msg->payload_len TSRMLS_CC);
     zend_update_property_long(ws_message_ce, message_obj, "payload_len", sizeof("payload_len")-1, (long) msg->payload_len TSRMLS_CC);
     params[1] = &message_obj;
     if (call_user_function_ex(NULL, &closure, &function_name, &return_user_call, 2, params, 0, NULL TSRMLS_CC) == FAILURE) {
